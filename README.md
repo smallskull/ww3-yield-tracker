@@ -63,14 +63,18 @@ File Structure:
 ├── tsconfig.json                     
 └── vite.config.ts                    
 
-3) UI
+4) UI
 <img width="1907" height="1073" alt="image" src="https://github.com/user-attachments/assets/a07ef145-6980-4f24-ae28-3a8144aa1938" />
 
 5) Backend
 <img width="1920" height="1090" alt="image" src="https://github.com/user-attachments/assets/ae848a89-3447-4603-a3c6-300fbe8a34da" />
 (stable pools get chosen from over 200+ pools)
 
-4) Hackathon requirement (completed vs exceeded):
+6) Icon/Logo
+<img width="1920" height="1090" alt="image" src="https://github.com/user-attachments/assets/2968c2b6-bf20-4796-88bb-43d867eb6ce1" />
+
+
+7) Hackathon requirement (completed vs exceeded):
 
     Build a real-time Web3 yield tracking platform that aggregates APY data from one of the protocols given in the list below
 
@@ -93,7 +97,7 @@ File Structure:
 
     EXTRAS- (limit, sorting, graph of individual pool etc.)
 
-6) Tech Stack
+8) Tech Stack
 Frontend
 
 React 18 - UI framework
@@ -121,7 +125,7 @@ Supabase - Managed PostgreSQL database
 The Graph Network - Decentralized indexing protocol
 Ethereum Mainnet - Blockchain data source
 
-7) Features
+9) Features
 
 Real-time APY Tracking: Live updates via WebSocket for instant yield changes
 Automatic Pool Discovery: Discovers 20-50+ stablecoin pools automatically from Uniswap V3
@@ -131,7 +135,7 @@ Customizable Limits: Filter by 10, 20, 30, or 50 pools
 Sortable Columns: Sort by APY, TVL, Volume, or Fees
 Dark Theme UI
 
-8) Tracked Stablecoins
+10) Tracked Stablecoins
 
 USDC (USD Coin)
 USDT (Tether)
@@ -139,3 +143,4 @@ USDE (Ethena USDe)
 DAI (MakerDAO)
 FRAX (Frax Finance)
 LUSD (Liquity USD)
+
