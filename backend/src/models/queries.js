@@ -52,7 +52,7 @@ async function getAllPools(limit = 20, sortField = 'apy', sortOrder = 'DESC') {
     }
 }
 
-// Get single pool by address
+
 async function getPoolByAddress(poolAddress) {
     try {
         const result = await pool.query(`
@@ -85,7 +85,6 @@ async function getPoolByAddress(poolAddress) {
     }
 }
 
-// Get pool history
 async function getPoolHistory(poolAddress, hours = 24) {
     try {
         const result = await pool.query(`
@@ -109,7 +108,6 @@ async function getPoolHistory(poolAddress, hours = 24) {
     }
 }
 
-// Insert or update pool
 async function upsertPool(poolData) {
     const { poolAddress, token0, token1, feeTier, tvl } = poolData;
 
@@ -131,7 +129,6 @@ async function upsertPool(poolData) {
     }
 }
 
-// Insert APY snapshot
 async function insertAPYSnapshot(poolId, apyData) {
     const { apy, fee24h, tvl, volume24h } = apyData;
 

@@ -3,7 +3,6 @@ const router = express.Router();
 const logger = require('../utils/logger');
 const queries = require('../models/queries');
 
-// Allowed sort fields (whitelist to prevent SQL injection)
 const ALLOWED_SORT_FIELDS = ['apy', 'tvl', 'volume24h', 'fee24h', 'feeTier'];
 const DEFAULT_SORT = 'apy';
 const DEFAULT_LIMIT = 20;
@@ -18,18 +17,15 @@ const MAX_LIMIT = 50;
  */
 router.get('/', async (req, res) => {
     try {
-        // Parse and validate limit
         let limit = parseInt(req.query.limit) || DEFAULT_LIMIT;
         if (limit < 1) limit = DEFAULT_LIMIT;
         if (limit > MAX_LIMIT) limit = MAX_LIMIT;
 
-        // Parse and validate sort field
         let sortField = (req.query.sort || DEFAULT_SORT).toLowerCase();
         if (!ALLOWED_SORT_FIELDS.includes(sortField)) {
             sortField = DEFAULT_SORT;
         }
 
-        // Parse sort order
         const sortOrder = (req.query.order || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
         logger.info('Fetching pools', { limit, sortField, sortOrder });
@@ -59,9 +55,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-/**
- * GET /api/pools/:address - Get single pool details
- */
+
 router.get('/:address', async (req, res) => {
     try {
         const { address } = req.params;
@@ -88,11 +82,6 @@ router.get('/:address', async (req, res) => {
     }
 });
 
-/**
- * GET /api/pools/:address/history - Historical APY/TVL data (24h by default)
- * Query params:
- *   - hours: Number of hours of history (default: 24, max: 168 = 7 days)
- */
 router.get('/:address/history', async (req, res) => {
     try {
         const { address } = req.params;
@@ -131,12 +120,7 @@ router.get('/:address/history', async (req, res) => {
     }
 });
 
-/**
- * GET /api/compare - Compare multiple pools
- * Query params:
- *   - pools: Comma-separated pool addresses (max 5)
- * Example: /api/compare?pools=0x123...,0x456...,0x789...
- */
+
 router.get('/compare', async (req, res) => {
     try {
         const poolsParam = req.query.pools;
@@ -215,15 +199,13 @@ router.get('/compare', async (req, res) => {
     }
 });
 
-/**
- * POST /api/pools/refresh - Manual refresh (for testing)
- */
+
 router.post('/refresh', async (req, res) => {
     try {
         const { manualRefresh } = require('../services/dataRefresher');
         const io = req.app.get('io');
 
-        // Don't await - let it run in background
+
         manualRefresh(io);
 
         res.json({
@@ -236,9 +218,7 @@ router.post('/refresh', async (req, res) => {
     }
 });
 
-/**
- * POST /api/pools/discover - Manually trigger pool discovery
- */
+
 router.post('/discover', async (req, res) => {
     try {
         const { discoverPriorityStablecoinPools } = require('../services/poolDiscovery');

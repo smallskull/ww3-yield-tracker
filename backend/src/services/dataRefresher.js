@@ -4,9 +4,7 @@ const { calculateAPY } = require('./apyCalculator');
 const queries = require('../models/queries');
 const logger = require('../utils/logger');
 
-/**
- * Get list of pools to track (from database, not hardcoded)
- */
+
 async function getTrackedPools() {
     try {
         const pools = await queries.getAllPools(1000); // Get all pools, no limit
@@ -21,7 +19,6 @@ async function refreshPoolData(io) {
     logger.info('Starting pool data refresh...');
 
     try {
-        // Get pools dynamically from database
         const trackedPools = await getTrackedPools();
 
         if (trackedPools.length === 0) {
@@ -31,10 +28,8 @@ async function refreshPoolData(io) {
 
         logger.info(`🔄 Refreshing ${trackedPools.length} pools...`);
 
-        // Fetch REAL data from The Graph
         const poolsData = await getMultiplePoolsData(trackedPools);
 
-        // Log which pools failed to fetch
         const fetchedAddresses = poolsData.map(p => p.poolAddress.toLowerCase());
         const failedPools = trackedPools.filter(addr => !fetchedAddresses.includes(addr.toLowerCase()));
 
@@ -47,10 +42,8 @@ async function refreshPoolData(io) {
 
         for (const poolData of poolsData) {
             try {
-                // Calculate APY using REAL fees and TVL
                 const apy = calculateAPY(poolData.fee24h, poolData.tvl);
 
-                // Update pool in database
                 const poolId = await queries.upsertPool({
                     poolAddress: poolData.poolAddress,
                     token0: poolData.token0,
@@ -59,7 +52,6 @@ async function refreshPoolData(io) {
                     tvl: poolData.tvl
                 });
 
-                // Insert APY snapshot with REAL data
                 await queries.insertAPYSnapshot(poolId, {
                     apy,
                     fee24h: poolData.fee24h,
@@ -75,7 +67,6 @@ async function refreshPoolData(io) {
                     tvl: `$${(poolData.tvl / 1000000).toFixed(2)}M`
                 });
 
-                // Broadcast update via WebSocket
                 if (io) {
                     io.to(`pool:${poolData.poolAddress}`).emit('apy_update', {
                         poolAddress: poolData.poolAddress,
@@ -87,7 +78,6 @@ async function refreshPoolData(io) {
                     });
                 }
 
-                // Small delay to avoid rate limiting
                 await new Promise(resolve => setTimeout(resolve, 300));
 
             } catch (error) {
@@ -107,20 +97,16 @@ async function refreshPoolData(io) {
     }
 }
 
-// Start cron job (runs every 2 minutes)
 function startDataRefresher(io) {
     logger.info('Starting data refresher cron job (every 2 minutes)...');
 
-    // Run immediately on startup
     refreshPoolData(io);
 
-    // Then run every 2 minutes
     cron.schedule('*/2 * * * *', () => {
         refreshPoolData(io);
     });
 }
 
-// Manual refresh function (for testing)
 async function manualRefresh(io) {
     return refreshPoolData(io);
 }

@@ -83,7 +83,6 @@ async function getMultiplePoolsData(poolAddresses) {
     const results = [];
     const errors = [];
 
-    // Process in batches of 5 to avoid rate limits
     const batchSize = 5;
     for (let i = 0; i < poolAddresses.length; i += batchSize) {
         const batch = poolAddresses.slice(i, i + batchSize);
@@ -103,7 +102,6 @@ async function getMultiplePoolsData(poolAddresses) {
             }
         });
 
-        // Small delay between batches
         if (i + batchSize < poolAddresses.length) {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
