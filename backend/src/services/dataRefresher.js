@@ -1,127 +1,15 @@
-// const cron = require('node-cron');
-// const { fetchPoolData, fetchPool24hData } = require('./uniswapFetcher');
-// const { calculateAPY } = require('./apyCalculator');
-// const queries = require('../models/queries');
-// const logger = require('../utils/logger');
-//
-// // Pool addresses we're tracking
-// const TRACKED_POOLS = [
-//     '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640', // USDC/WETH 0.05%
-//     '0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8', // USDC/USDT 0.01%
-//     '0x3416cf6c708da44db2624d63ea0aaef7113527c6', // USDC/USDT 0.05%
-//     '0x7858e59e0c01ea06df3af3d20ac7b0003275d4bf'  // USDC/USDT 0.3%
-// ];
-//
-// async function refreshPoolData(io) {
-//     logger.info('Starting pool data refresh...');
-//
-//     try {
-//         // Fetch current pool data from The Graph
-//         const poolsData = await fetchPoolData(TRACKED_POOLS);
-//
-//         for (const poolData of poolsData) {
-//             try {
-//                 // Get 24h historical data for accurate APY
-//                 const dayData = await fetchPool24hData(poolData.poolAddress);
-//
-//                 if (!dayData) {
-//                     logger.warn('No 24h data available', { pool: poolData.poolAddress });
-//                     continue;
-//                 }
-//
-//                 // Calculate APY
-//                 const apy = calculateAPY(dayData.fee24h, dayData.tvl);
-//
-//                 // Update pool in database
-//                 const poolId = await queries.upsertPool({
-//                     poolAddress: poolData.poolAddress,
-//                     token0: poolData.token0,
-//                     token1: poolData.token1,
-//                     feeTier: poolData.feeTier,
-//                     tvl: dayData.tvl
-//                 });
-//
-//                 // Insert APY snapshot
-//                 await queries.insertAPYSnapshot(poolId, {
-//                     apy,
-//                     fee24h: dayData.fee24h,
-//                     tvl: dayData.tvl,
-//                     volume24h: dayData.volume24h
-//                 });
-//
-//                 logger.info('Pool updated', {
-//                     pool: poolData.poolAddress,
-//                     pair: `${poolData.token0}/${poolData.token1}`,
-//                     apy: apy.toFixed(2) + '%',
-//                     tvl: `$${(dayData.tvl / 1000000).toFixed(2)}M`
-//                 });
-//
-//                 // Broadcast update via WebSocket
-//                 if (io) {
-//                     io.to(`pool:${poolData.poolAddress}`).emit('apy_update', {
-//                         poolAddress: poolData.poolAddress,
-//                         apy,
-//                         tvl: dayData.tvl,
-//                         fee24h: dayData.fee24h,
-//                         volume24h: dayData.volume24h,
-//                         timestamp: new Date().toISOString()
-//                     });
-//                 }
-//
-//                 // Small delay to avoid rate limiting
-//                 await new Promise(resolve => setTimeout(resolve, 500));
-//
-//             } catch (error) {
-//                 logger.error('Error processing pool', {
-//                     pool: poolData.poolAddress,
-//                     error: error.message
-//                 });
-//             }
-//         }
-//
-//         logger.info('Pool data refresh completed');
-//
-//     } catch (error) {
-//         logger.error('Error in refresh cycle', { error: error.message });
-//     }
-// }
-//
-// // Start cron job (runs every 2 minutes)
-// function startDataRefresher(io) {
-//     logger.info('Starting data refresher cron job (every 2 minutes)...');
-//
-//     // Run immediately on startup
-//     refreshPoolData(io);
-//
-//     // Then run every 2 minutes
-//     cron.schedule('*/2 * * * *', () => {
-//         refreshPoolData(io);
-//     });
-// }
-//
-// // Manual refresh function (for testing)
-// async function manualRefresh(io) {
-//     return refreshPoolData(io);
-// }
-//
-// module.exports = {
-//     startDataRefresher,
-//     manualRefresh
-// };
-
 const cron = require('node-cron');
 const { getMultiplePoolsData } = require('./graphClient');
 const { calculateAPY } = require('./apyCalculator');
 const queries = require('../models/queries');
 const logger = require('../utils/logger');
-const { DISCOVERY } = require('../config/constants');
 
 /**
  * Get list of pools to track (from database, not hardcoded)
  */
 async function getTrackedPools() {
     try {
-        const pools = await queries.getAllPools();
+        const pools = await queries.getAllPools(1000); // Get all pools, no limit
         return pools.map(p => p.pool_address);
     } catch (error) {
         logger.error('Failed to get tracked pools from DB', { error: error.message });
@@ -146,6 +34,17 @@ async function refreshPoolData(io) {
         // Fetch REAL data from The Graph
         const poolsData = await getMultiplePoolsData(trackedPools);
 
+        // Log which pools failed to fetch
+        const fetchedAddresses = poolsData.map(p => p.poolAddress.toLowerCase());
+        const failedPools = trackedPools.filter(addr => !fetchedAddresses.includes(addr.toLowerCase()));
+
+        if (failedPools.length > 0) {
+            logger.warn(`⚠️  Failed to fetch data for ${failedPools.length} pools:`, failedPools.slice(0, 5));
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+
         for (const poolData of poolsData) {
             try {
                 // Calculate APY using REAL fees and TVL
@@ -168,6 +67,7 @@ async function refreshPoolData(io) {
                     volume24h: poolData.volume24h
                 });
 
+                successCount++;
                 logger.info('✅ Pool updated', {
                     pool: poolData.poolAddress,
                     pair: `${poolData.token0}/${poolData.token1}`,
@@ -191,19 +91,22 @@ async function refreshPoolData(io) {
                 await new Promise(resolve => setTimeout(resolve, 300));
 
             } catch (error) {
+                errorCount++;
                 logger.error('Error processing pool', {
                     pool: poolData.poolAddress,
-                    error: error.message
+                    error: error.message,
+                    stack: error.stack
                 });
             }
         }
 
-        logger.info(`✅ Refresh completed - ${poolsData.length}/${trackedPools.length} pools updated`);
+        logger.info(`✅ Refresh completed - ${successCount} updated, ${errorCount} errors, ${failedPools.length} fetch failures`);
 
     } catch (error) {
-        logger.error('Error in refresh cycle', { error: error.message });
+        logger.error('Error in refresh cycle', { error: error.message, stack: error.stack });
     }
 }
+
 // Start cron job (runs every 2 minutes)
 function startDataRefresher(io) {
     logger.info('Starting data refresher cron job (every 2 minutes)...');
@@ -224,5 +127,6 @@ async function manualRefresh(io) {
 
 module.exports = {
     startDataRefresher,
-    manualRefresh
+    manualRefresh,
+    getTrackedPools
 };

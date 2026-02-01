@@ -77,13 +77,43 @@ async function getPoolData(poolAddress) {
 }
 
 /**
- * Fetch multiple pools at once
+ * Fetch multiple pools at once with better error handling
  */
 async function getMultiplePoolsData(poolAddresses) {
-    const results = await Promise.all(
-        poolAddresses.map(addr => getPoolData(addr))
-    );
-    return results.filter(p => p !== null);
+    const results = [];
+    const errors = [];
+
+    // Process in batches of 5 to avoid rate limits
+    const batchSize = 5;
+    for (let i = 0; i < poolAddresses.length; i += batchSize) {
+        const batch = poolAddresses.slice(i, i + batchSize);
+
+        const batchResults = await Promise.allSettled(
+            batch.map(addr => getPoolData(addr))
+        );
+
+        batchResults.forEach((result, index) => {
+            if (result.status === 'fulfilled' && result.value !== null) {
+                results.push(result.value);
+            } else {
+                errors.push({
+                    address: batch[index],
+                    reason: result.reason?.message || 'Unknown error'
+                });
+            }
+        });
+
+        // Small delay between batches
+        if (i + batchSize < poolAddresses.length) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+    }
+
+    if (errors.length > 0) {
+        logger.warn(`Failed to fetch ${errors.length} pools:`, errors.slice(0, 5).map(e => e.address));
+    }
+
+    return results;
 }
 
 module.exports = {

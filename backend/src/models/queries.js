@@ -1,9 +1,26 @@
 const pool = require('../config/database');
 const logger = require('../utils/logger');
 
-// Get all pools
-async function getAllPools() {
+/**
+ * Get all pools with optional limit and sorting
+ * @param {number} limit - Max number of pools to return
+ * @param {string} sortField - Field to sort by (apy, tvl, volume24h, fee24h, feeTier)
+ * @param {string} sortOrder - ASC or DESC
+ */
+async function getAllPools(limit = 20, sortField = 'apy', sortOrder = 'DESC') {
     try {
+        // Map API field names to database column names
+        const fieldMap = {
+            'apy': 's.apy',
+            'tvl': 's.tvl',
+            'volume24h': 's.volume_24h',
+            'fee24h': 's.fee_24h',
+            'feeTier': 'p.fee_tier'
+        };
+
+        const sortColumn = fieldMap[sortField] || 's.apy';
+        const order = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
         const result = await pool.query(`
             SELECT
                 p.id,
@@ -17,15 +34,17 @@ async function getAllPools() {
                 s.volume_24h,
                 s.timestamp
             FROM pools p
-                     LEFT JOIN LATERAL (
-                SELECT apy, fee_24h, volume_24h, timestamp
-            FROM apy_snapshots
-            WHERE pool_id = p.id
-            ORDER BY timestamp DESC
+            LEFT JOIN LATERAL (
+                SELECT apy, fee_24h, volume_24h, tvl, timestamp
+                FROM apy_snapshots
+                WHERE pool_id = p.id
+                ORDER BY timestamp DESC
                 LIMIT 1
-                ) s ON true
-            ORDER BY s.apy DESC NULLS LAST
-        `);
+            ) s ON true
+            ORDER BY ${sortColumn} ${order} NULLS LAST
+            LIMIT $1
+        `, [limit]);
+
         return result.rows;
     } catch (error) {
         logger.error('Error getting all pools', { error: error.message });

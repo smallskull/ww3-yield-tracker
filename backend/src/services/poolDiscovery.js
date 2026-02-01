@@ -18,10 +18,10 @@ const STABLE_ADDRESSES = Object.values(STABLECOINS).map(addr => addr.toLowerCase
 
 /**
  * Fetch top stablecoin pools from Uniswap V3 Subgraph
- * @param {number} limit - Number of pools to fetch (default 50)
+ * @param {number} limit - Number of pools to fetch (default 200)
  * @returns {Array} Array of pool objects
  */
-async function fetchTopStablecoinPools(limit = 50) {
+async function fetchTopStablecoinPools(limit = 200) {
     const query = `
         query GetTopStablecoinPools($stablecoins: [String!]!, $limit: Int!) {
             pools(
@@ -111,10 +111,10 @@ function filterStablecoinPairs(pools) {
 /**
  * Filter pools with minimum TVL threshold
  * @param {Array} pools - Pool data
- * @param {number} minTVL - Minimum TVL in USD (default $100k)
+ * @param {number} minTVL - Minimum TVL in USD (default $10k)
  * @returns {Array} Filtered pools
  */
-function filterByTVL(pools, minTVL = 100000) {
+function filterByTVL(pools, minTVL = 10000) {
     return pools.filter(pool => {
         const tvl = parseFloat(pool.totalValueLockedUSD);
         return tvl >= minTVL;
@@ -128,8 +128,8 @@ function filterByTVL(pools, minTVL = 100000) {
  */
 async function discoverStablecoinPools(options = {}) {
     const {
-        limit = 50,
-        minTVL = 100000,
+        limit = 200,
+        minTVL = 10000,
         bothStable = true
     } = options;
 
@@ -146,7 +146,7 @@ async function discoverStablecoinPools(options = {}) {
 
         if (rawPools.length === 0) {
             logger.warn('No pools found from subgraph');
-            return { inserted: 0, skipped: 0, errors: 0 };
+            return { inserted: 0, skipped: 0, errors: 0, poolAddresses: [], totalInDB: 0 };
         }
 
         // Step 2: Filter pools
@@ -166,6 +166,7 @@ async function discoverStablecoinPools(options = {}) {
         let inserted = 0;
         let skipped = 0;
         let errors = 0;
+        const insertedAddresses = [];
 
         for (const pool of filteredPools) {
             try {
@@ -178,17 +179,21 @@ async function discoverStablecoinPools(options = {}) {
                 });
 
                 inserted++;
+                insertedAddresses.push(pool.id);
                 logger.info(`✅ Added pool: ${pool.token0.symbol}/${pool.token1.symbol} (${pool.feeTier/10000}%) - TVL: $${(parseFloat(pool.totalValueLockedUSD)/1000000).toFixed(2)}M`);
 
             } catch (error) {
-                if (error.code === '23505') { // Unique constraint violation (pool already exists)
+                // PostgreSQL unique constraint violation
+                if (error.code === '23505') {
                     skipped++;
+                    insertedAddresses.push(pool.id);
                     logger.debug(`⏭️  Pool already exists: ${pool.id}`);
                 } else {
                     errors++;
                     logger.error('Failed to insert pool', {
                         pool: pool.id,
-                        error: error.message
+                        error: error.message,
+                        code: error.code
                     });
                 }
             }
@@ -199,7 +204,9 @@ async function discoverStablecoinPools(options = {}) {
             filtered: filteredPools.length,
             inserted,
             skipped,
-            errors
+            errors,
+            poolAddresses: insertedAddresses,
+            totalInDB: inserted + skipped
         };
 
         logger.info('✅ Pool discovery completed!', summary);
@@ -217,9 +224,9 @@ async function discoverStablecoinPools(options = {}) {
  */
 async function discoverPriorityStablecoinPools() {
     return discoverStablecoinPools({
-        limit: 100,        // Fetch more to ensure we get enough stable-stable pairs
-        minTVL: 50000,     // Lower threshold ($50k) for more options
-        bothStable: true   // Only stable-stable pairs
+        limit: 200,
+        minTVL: 10000,
+        bothStable: true
     });
 }
 

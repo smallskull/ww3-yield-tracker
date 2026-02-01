@@ -90,16 +90,25 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, async () => {
     logger.info(`Server running on port ${PORT}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+    // ✨ Auto-discover stablecoin pools on startup
     const { DISCOVERY } = require('./config/constants');
     if (DISCOVERY.ENABLED && DISCOVERY.ON_STARTUP) {
         try {
             const { discoverPriorityStablecoinPools } = require('./services/poolDiscovery');
+            const { manualRefresh } = require('./services/dataRefresher');
+
             logger.info('🔍 Running pool discovery on startup...');
             const result = await discoverPriorityStablecoinPools();
             logger.info('🎉 Pool discovery summary:', result);
+
+            // Immediately refresh discovered pools
+            if (result.totalInDB > 0) {
+                logger.info('🔄 Triggering immediate refresh for discovered pools...');
+                setTimeout(() => manualRefresh(yieldNS), 2000);
+            }
         } catch (error) {
             logger.error('Pool discovery failed on startup:', error);
-            // Don't crash server if discovery fails
         }
     }
 
